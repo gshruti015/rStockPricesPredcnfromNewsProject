@@ -1,0 +1,245 @@
+---
+title: "Project"
+author: "Shruti"
+date: "5/5/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# install.packages("ggplot2")
+# install.packages("Metrics")
+# install.packages("e1071")
+# install.packages("SparseM")
+# install.packages("tm")
+# install.packages("tree")
+# install.packages("gbm")
+# install.packages("forecast")
+# install.packages("randomForest")
+# install.packages("corrplot")
+#install.packages('GGally')
+
+llibrary('e1071')
+library('SparseM')
+library('tm')
+library('Metrics')
+library('ggplot2')
+library('randomForest')
+library('gbm')
+library('plotly')
+library("lattice")
+library("corrplot")
+library('GGally')
+
+setwd("~/Desktop/Sem2/Data MIning - Kislay Prasad/Data Mining Project")
+news <- read.csv("RedditNews.csv")
+news$News <- as.character(news$News)
+newsvector <- as.vector(news$News);    # Create vector
+newssource <- VectorSource(newsvector); # Create source
+newscorpus <- Corpus(newssource);       # Create corpus
+```
+
+```{r setup, include=FALSE}
+# PERFORMING THE VARIOUS TRANSFORMATIONS on "traincorpus" and "testcorpus" DATASETS
+# SUCH AS TRIM WHITESPACE, REMOVE PUNCTUATION, REMOVE STOPWORDS.
+
+#TEXT PRE-PROCESSING
+newscorpus <- tm_map(newscorpus,stripWhitespace);
+#newscorpus
+newscorpus <- tm_map(newscorpus,content_transformer(tolower));
+newscorpus <- tm_map(newscorpus, removeWords,c("the","end",stopwords("english")));
+newscorpus <- tm_map(newscorpus,removePunctuation);
+newscorpus <- tm_map(newscorpus,removeNumbers);
+inspect(newscorpus[1])
+
+
+# remove anything other than English letters or space
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x)
+newscorpus <- tm_map(newscorpus, content_transformer(removeNumPunct))
+
+# remove URLs
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
+newscorpus <- tm_map(newscorpus, content_transformer(removeURL))
+```
+```{r setup, include=FALSE}
+tdm1 <- TermDocumentMatrix(newscorpus)
+tdm1 = removeSparseTerms(tdm1, 0.99)
+tdm1
+
+# Create DocumentTermMattrix
+dtm_matrix <- t(tdm1)
+dtm_matrix
+dtm_df <- data.frame(news$Date,as.matrix(dtm_matrix))
+dtm_df
+
+#Coombine news of same dates in one row - data had mulitple news rows for a single date
+combined_news<-aggregate(dtm_df[-1], by=list(dtm_df$news.Date), sum)
+```
+
+```{r setup, include=FALSE}
+#Reading the stock price excel
+df1<-read.csv("DJIA_table.csv")
+combined_news$Date<-combined_news$Group.1
+total <- merge(combined_news,df1,by="Date")
+total$Group.1<-NULL
+```
+
+```{r setup, include=FALSE}
+#Exploratory Analysis
+total1 <- total
+
+#Grapghs on News Data
+
+#Graph to show Stock Per Week
+total1$Week <- c(0, rep(1:(nrow(total1)-1)%/%5))
+summary <- group_by(total1, Week) %>%
+summarise(Diff_High_Low= mean(High-Low))
+(p <- plot_ly(data=summary, x=~Week, y=~Diff_High_Low, type = "scatter",
+             textfont = list(color = '#000000', size = 16)) %>%
+            layout(title = "Scatter Plot of Diff of Stock per Week",
+            xaxis = list(title = 'Week',
+                        zeroline = TRUE,
+            yaxis = list(title = 'Difference of High Vs Low Per Week', zeroline = TRUE))))
+
+#Various Exploratory Grapghs
+djia<-df1
+
+plot(High + Low + Open + Close + Adj.Close ~ Date, 
+       data = djia, 
+       type = c('l','l'), 
+       col = c("blue", "red"),
+       auto.key = T)
+
+plot(djia$Date, djia$High,
+     xlab = "Date",
+     ylab = "High",
+     main = "Relation between the date and the high")
+
+plot(djia$Date, djia$Low,
+     xlab = "Date",
+     ylab = "Low",
+     main = "Relation between the date and the low")
+
+plot(djia$Date, djia$Close,
+     xlab = "Date",
+     ylab = "Close",
+     main = "Relation between the date and the close")
+
+plot(djia$Date, djia$Adj.Close,
+     xlab = "Date",
+     ylab = "Adj.Close",
+     main = "Relation between the date and the Adj.Close")
+
+plot(djia$Date, djia$Open,
+     xlab = "Date",
+     ylab = "Open",
+     main = "Relation between the date and the open")
+
+
+#Graphs on Text Data
+viz_data<-combined_news
+viz_data<-viz_data[-1]
+viz_data<-viz_data[-114]
+freq_df<-data.frame(names(viz_data),colSums(viz_data))
+freq_df <- freq_df[order(-freq_df$colSums.viz_data.),] 
+
+#Grapgh to show frequency of keywords
+(p <- plot_ly(
+  x = freq_df$names.viz_data.,
+  y = freq_df$colSums.viz_data.,
+  name = "Bar Plot of Term Frequency",
+  type = "bar", text = "Primates", textposition = 'middle right', textfont = list(color = '#000000', size = 16)) %>%
+  layout(title = "Bar Plot of Term Frequency",
+         xaxis = list(title = 'Keywords from Twitter Data',
+                      zeroline = TRUE,
+                      yaxis = list(title = 'Frequency of each Kewyord', zeroline = TRUE))))
+
+#word cloud of important words
+findFreqTerms(freq_df, lowfreq = 4)
+wordcloud(words = freq_df$names.viz_data., freq = freq_df$colSums.viz_data., min.freq = 700,
+          max.words=150, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+
+#Correlation plot 
+imp_words_df= viz_data[,colSums(viz_data) > 1500]
+corr<-cor(imp_words_df)
+ggcorr(corr)
+```
+
+```{r setup, include=FALSE}
+#Running the Linear Regression and GLM Model
+set.seed(123)
+final<-total
+
+#split the data, we sampled based on dates, not random
+inTrain <- sample(nrow(final),0.7*nrow(final))
+traindata <- final[inTrain,]
+testdata <- final[-inTrain,]
+
+#creating copies of data
+traindata1<-traindata
+traindata$Date<-NULL
+testdata1<-testdata
+testdata$Date<-NULL
+
+#final model
+fit<-lm(Close~.-Adj.Close-High-Low-Volume,data=traindata)
+summary(fit)
+fit2<-glm(Close~.-Adj.Close-High-Low-Volume,data=traindata)
+summary(fit2)
+
+predicted<-predict(fit,newdata = testdata)
+rmse(testdata$Close,predicted)
+
+predicted1<-predict(fit2,newdata = testdata, type = "response")
+rmse(testdata$Close,predicted1)
+```
+
+```{r setup, include=FALSE}
+#Random Forest
+
+final<-total
+final$Date<-NULL
+final$change<-final$Close-final$Open
+
+set.seed(123)
+inTrain <- sample(nrow(final),0.7*nrow(final))
+
+rf.Close=randomForest(change~.-Adj.Close-High-Low-Volume-Close-Open,data=final,subset=inTrain,mtry=4,importance=TRUE)
+rf.Close
+summary(rf.Close)
+
+prediction = predict(rf.Close,newdata=final[-inTrain,])
+Close.test=final[-inTrain,"change"]
+
+importance(rf.Close)
+varImpPlot(rf.Close)
+
+#error from random forest based on Change (High-Low)
+er_rf<-rmse(Close.test,prediction)
+er_rf
+
+#error from random forest based on Closing Price of Stock
+close<-final[-inTrain,"Close"]
+open<-final[-inTrain,"Open"]
+pred<-open+prediction
+er_rf1<-rmse(final[-inTrain,"Close"],pred)
+er_rf1
+```
+
+
+```{r setup, include=FALSE}
+#Boosting
+set.seed(123)
+boost.Close=gbm(Close~.-Adj.Close-High-Low-Volume,data=final[inTrain,],n.trees=5000,interaction.depth=4)
+summary(boost.Close)
+par(mfrow=c(1,2))
+
+yhat.boost=predict(boost.Close,newdata=final[-inTrain,],n.trees=5000,type="response")
+yhat.test=final$Close[-inTrain]
+
+#error in boosting
+err_boost=rmse(yhat.boost,yhat.test)
+err_boost
+```
+
+
