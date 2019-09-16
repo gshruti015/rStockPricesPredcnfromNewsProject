@@ -65,7 +65,7 @@ tdm1 <- TermDocumentMatrix(newscorpus)
 tdm1 = removeSparseTerms(tdm1, 0.99)
 tdm1
 
-# Create DocumentTermMattrix
+# Create DocumentTermMatrix
 dtm_matrix <- t(tdm1)
 dtm_matrix
 dtm_df <- data.frame(news$Date,as.matrix(dtm_matrix))
@@ -142,7 +142,7 @@ viz_data<-viz_data[-114]
 freq_df<-data.frame(names(viz_data),colSums(viz_data))
 freq_df <- freq_df[order(-freq_df$colSums.viz_data.),] 
 
-#Grapgh to show frequency of keywords
+#Graph to show frequency of keywords
 (p <- plot_ly(
   x = freq_df$names.viz_data.,
   y = freq_df$colSums.viz_data.,
